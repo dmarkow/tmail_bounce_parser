@@ -1,13 +1,24 @@
 TmailBounceParser
 =================
 
-Introduction goes here.
-
+This is based on Recipe 70 of Rails Recipes: "Handling Bounced Email". It has been updated 
+to include implementations for non-standard servers that don't include the message/delivery-status 
+and message/rfc822 parts.
 
 Example
 =======
 
-Example goes here.
+message = TMail::Mail.parse(STDIN)
+undeliverable_info = message.undeliverable_info
+
+undeliverable_info.original_sender
+# => "user@example.com"
+
+undeliverable_info.message_id
+# => "1242351jfsh235j523j@ggds.sa"
+
+undeliverable_info.status
+# => "Failure"
 
 
-Copyright (c) 2008 [name of plugin creator], released under the MIT license
+Released under the MIT license

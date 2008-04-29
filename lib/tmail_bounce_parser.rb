@@ -6,7 +6,7 @@
 module TmailBounceParser
 
   class BouncedDelivery
-    attr_accessor :status_info, :original_message_id, :original_sender, :original_recipient, :original_subject
+    attr_accessor :status_info, :original_message_id, :original_sender, :original_recipient, :original_subject, :handling_server
     def self.from_email(email)
       returning(bounce = self.new) do
 
@@ -83,6 +83,6 @@ module TmailBounceParser
   end
   
   def undeliverable_info
-        
+    BouncedDelivery.from_email(self)
   end
 end
