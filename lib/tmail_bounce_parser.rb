@@ -6,16 +6,71 @@
 module TmailBounceParser
 
   class BouncedDelivery
-    attr_accessor :status_info, :original_message_id, :original_sender, :original_recipient, :original_subject, :handling_server
+    attr_accessor :status_info, :original_message_id, :original_sender, :original_recipient, :original_subject, :handling_server, :status_part
     def self.from_email(email)
-      returning(bounce = self.new) do
-
-        if (email['subject'].to_s =~ /not listed in Domino Directory/)
-          bounce.handling_server = "DOMINO"
-        elsif (email['subject'].to_s =~ /Mail delivery failed: returning message to sender/)
-          bounce.handling_server = "EXIM"
+      bounce = self.new
+      # lets start by trying to extract the message/delivery-status part
+      
+      bounce.status_part = email.parts.detect { |part| part.content_type == "message/delivery-status" }
+      if !bounce.status_part.nil?
+        statuses = bounce.status_part.body.gsub("\n ","").split(/\n/)
+        bounce.status_info = statuses.inject({}) do |hash,line|
+          key,value = line.split(/:/,2)
+          hash[key] = value.strip rescue nil
+          hash
+        end
+        original_message_part = email.parts.detect do |part|
+          part.content_type == "message/rfc822"
+        end
+        unless original_message_part.nil?
+          parsed_msg = TMail::Mail.parse(original_message_part.body)
+          bounce.original_message_id = parsed_msg.message_id
         else
-          bounce.handling_server = "STANDARD"
+          original_message_part = email.parts.detect do |part|
+            part.content_type == "text/rfc822-headers"
+          end
+          unless original_message_part.nil?
+            parsed_msg = TMail::Mail.parse(original_message_part.body)
+            bounce.original_message_id = parsed_msg.message_id
+          end
+        end
+        
+      else
+        if (email['subject'].to_s == "Mail delivery failed: returning message to sender")
+          bounce.handling_server = :exim
+          
+          original_message_part = email.body
+          bounce.original_message_id = original_message_part[/Message.*$/].split(" ")[1] rescue "N/A"
+          arr = original_message_part.split("\n")
+          for i in 0..arr.length-1
+            if arr[i][/The following address/]
+              j = i + 3
+              status = []
+              while arr[j].strip != ""
+                status << arr[j].strip
+                j += 1
+              end
+              bounce.status_info = {}
+              bounce.status_info['Status'] = status.join(" ")
+              break
+            end
+          end
+        end
+        
+      end
+      
+      bounce
+    end
+    def test
+      returning(bounce = self.new) do
+      
+        # We need to figure out which server sent the rejection notice first
+        if (email['subject'].to_s =~ /not listed in Domino Directory/)
+          bounce.handling_server = :domino
+        elsif (email['subject'].to_s =~ /Mail delivery failed: returning message to sender/)
+          bounce.handling_server = :exim
+        else
+          bounce.handling_server = :standard
         end
 
         # Domino mail servers munge the "original message id" to something completely different
